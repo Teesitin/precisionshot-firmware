@@ -1,6 +1,0 @@
--mlongcalls
--fno-builtin-memcpy
--fno-builtin-memset
--fno-builtin-bzero
-"-specs=C:/Workspace/precisionshot-firmware/build/specs/picolibc.specs"
--fno-rtti
