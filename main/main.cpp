@@ -6,9 +6,8 @@
 #include <SPI.h>
 #include <Wire.h>
 
-// PrecisionShot ESP32-S3 Bluetooth Low Energy diagnostic firmware.
-// This intentionally excludes the normal product UI and sensor pipeline.
-
+// PrecisionShot ESP32-S3 prototype firmware. This combines the working BLE
+// GATT server with a small, touch-first on-device UI.
 constexpr char DEVICE_NAME[] = "PrecisionShot";
 constexpr char SERVICE_UUID[] = "8c7a0001-6c3b-4f3d-a8d9-2adbc9f10211";
 constexpr char TX_UUID[] = "8c7a0002-6c3b-4f3d-a8d9-2adbc9f10211";
@@ -32,21 +31,52 @@ constexpr uint16_t LCD_HEIGHT = 320;
 constexpr uint32_t SPI_FREQUENCY = 80000000;
 constexpr uint8_t TOUCH_ADDRESS = 0x38;
 
-constexpr uint16_t BACKGROUND = 0x0840;
-constexpr uint16_t PANEL = 0x18C2;
-constexpr uint16_t HEADER = 0x0000;
-constexpr uint16_t ACCENT = 0xEE82;
-constexpr uint16_t ACCENT_DARK = 0x7B47;
-constexpr uint16_t MUTED = 0x41A4;
-constexpr uint16_t TEXT_DARK = 0x0840;
-constexpr uint16_t TEXT_LIGHT = 0xF77A;
-constexpr uint16_t GREEN = 0x07E0;
-constexpr uint16_t RED = 0xF800;
+constexpr int SCORE_X = 168;
+constexpr int SCORE_Y = 64;
+constexpr int SCORE_W = 296;
+constexpr int SCORE_H = 178;
+constexpr int RESET_X = 16;
+constexpr int RESET_Y = 164;
+constexpr int RESET_W = 136;
+constexpr int RESET_H = 78;
+constexpr int BLE_ACTION_X = 330;
+constexpr int BLE_ACTION_Y = 91;
+constexpr int BLE_ACTION_W = 118;
+constexpr int BLE_ACTION_H = 62;
+constexpr int THEME_ROW_X = 16;
+constexpr int THEME_ROW_Y = 190;
+constexpr int THEME_ROW_W = 448;
+constexpr int THEME_ROW_H = 68;
+constexpr int MENU_X = 270;
+constexpr int MENU_CLASSIC_Y = 68;
+constexpr int MENU_SETTINGS_Y = 138;
+constexpr int MENU_ITEM_H = 56;
+constexpr int BUBBLE_X = 438;
+constexpr int BUBBLE_Y = 278;
+constexpr int BUBBLE_RADIUS = 27;
 
-constexpr int HIT_X = 16;
-constexpr int HIT_Y = 244;
-constexpr int HIT_W = 448;
-constexpr int HIT_H = 60;
+struct Palette {
+  uint16_t background;
+  uint16_t surface;
+  uint16_t surfaceAlt;
+  uint16_t header;
+  uint16_t accent;
+  uint16_t accentPressed;
+  uint16_t text;
+  uint16_t muted;
+  uint16_t onAccent;
+  uint16_t success;
+  uint16_t danger;
+};
+
+constexpr Palette DARK_PALETTE = {
+    0x0840, 0x18C2, 0x2944, 0x0000, 0xEE82, 0xBDA4,
+    0xF77A, 0x8410, 0x0840, 0x3666, 0xD145};
+constexpr Palette LIGHT_PALETTE = {
+    0xEF7D, 0xFFFF, 0xDEFB, 0xFFFF, 0xDDA2, 0xB4C2,
+    0x18C2, 0x6B4D, 0x0840, 0x2589, 0xC904};
+
+enum class Page : uint8_t { Classic, Settings };
 
 SPIClass lcdSpi(FSPI);
 const SPISettings lcdSettings(SPI_FREQUENCY, MSBFIRST, SPI_MODE0);
@@ -61,12 +91,21 @@ volatile bool restartAdvertising = false;
 volatile bool rxChanged = false;
 portMUX_TYPE bleMux = portMUX_INITIALIZER_UNLOCKED;
 
+Page currentPage = Page::Classic;
+bool menuOpen = false;
+bool darkMode = true;
+bool touchWasDown = false;
+bool bleAdvertisingActive = false;
+bool hasShot = false;
 char lastRx[25] = "NONE";
-uint32_t hitCount = 0;
+uint32_t shotCount = 0;
 uint32_t rxCount = 0;
 uint32_t connectionCount = 0;
-bool touchWasDown = false;
-bool buttonPressed = false;
+int lastShotScore = 0;
+
+const Palette &theme() {
+  return darkMode ? DARK_PALETTE : LIGHT_PALETTE;
+}
 
 void startWrite(bool dataMode) {
   lcdSpi.beginTransaction(lcdSettings);
@@ -165,8 +204,23 @@ void fillScreen(uint16_t color) {
   fillRect(0, 0, LCD_WIDTH, LCD_HEIGHT, color);
 }
 
+void fillCircle(int centerX, int centerY, int radius, uint16_t color) {
+  for (int y = -radius; y <= radius; ++y) {
+    const int halfWidth = static_cast<int>(sqrtf(radius * radius - y * y));
+    fillRect(centerX - halfWidth, centerY + y, halfWidth * 2 + 1, 1, color);
+  }
+}
+
+void fillPill(int x, int y, int width, int height, uint16_t color) {
+  const int radius = (height - 1) / 2;
+  fillRect(x + radius, y, width - radius * 2, height, color);
+  fillCircle(x + radius, y + height / 2, radius, color);
+  fillCircle(x + width - radius - 1, y + height / 2, radius, color);
+}
+
 const uint8_t *glyphFor(char character) {
   static const uint8_t space[5] = {0, 0, 0, 0, 0};
+  static const uint8_t plus[5] = {0x08, 0x08, 0x3E, 0x08, 0x08};
   static const uint8_t minus[5] = {0x08, 0x08, 0x08, 0x08, 0x08};
   static const uint8_t colon[5] = {0x00, 0x36, 0x36, 0x00, 0x00};
   static const uint8_t digits[10][5] = {
@@ -193,9 +247,15 @@ const uint8_t *glyphFor(char character) {
   if (character >= 'a' && character <= 'z') character -= 32;
   if (character >= 'A' && character <= 'Z') return letters[character - 'A'];
   if (character >= '0' && character <= '9') return digits[character - '0'];
+  if (character == '+') return plus;
   if (character == '-') return minus;
   if (character == ':') return colon;
   return space;
+}
+
+int textWidth(const char *text, int scale = 1) {
+  const int length = strlen(text);
+  return length == 0 ? 0 : length * 6 * scale - scale;
 }
 
 void drawText(int x, int y, const char *text, uint16_t color, int scale = 1) {
@@ -212,49 +272,152 @@ void drawText(int x, int y, const char *text, uint16_t color, int scale = 1) {
   }
 }
 
-void drawStatus() {
-  fillRect(16, 56, 448, 54, PANEL);
-  drawText(28, 68, "BLE STATUS", ACCENT, 1);
-  fillRect(28, 88, 10, 10, phoneConnected ? GREEN : ACCENT);
-  drawText(48, 88, phoneConnected ? "CONNECTED" : "ADVERTISING", TEXT_LIGHT, 1);
-
-  char count[24];
-  snprintf(count, sizeof(count), "LINKS %lu", static_cast<unsigned long>(connectionCount));
-  fillRect(328, 68, 124, 30, PANEL);
-  drawText(340, 88, count, MUTED, 1);
+void drawCenteredText(int left, int width, int y, const char *text,
+                      uint16_t color, int scale = 1) {
+  drawText(left + (width - textWidth(text, scale)) / 2, y, text, color, scale);
 }
 
-void drawActivity() {
-  fillRect(16, 122, 448, 108, PANEL);
-  drawText(28, 134, "DEVICE", ACCENT, 1);
-  drawText(112, 134, "PRECISIONSHOT", TEXT_LIGHT, 1);
-  drawText(28, 154, "SERVICE", ACCENT, 1);
-  drawText(112, 154, "8C7A0001", TEXT_LIGHT, 1);
-  drawText(28, 174, "TX NOTIFY", ACCENT, 1);
-  drawText(112, 174, "8C7A0002", TEXT_LIGHT, 1);
-  drawText(28, 194, "RX WRITE", ACCENT, 1);
-  drawText(112, 194, "8C7A0003", TEXT_LIGHT, 1);
-
-  char activity[40];
-  snprintf(activity, sizeof(activity), "HITS %lu  RX %lu  LAST %.12s",
-           static_cast<unsigned long>(hitCount), static_cast<unsigned long>(rxCount), lastRx);
-  fillRect(270, 134, 180, 78, PANEL);
-  drawText(280, 194, activity, MUTED, 1);
+void drawHeader(const char *pageName) {
+  fillRect(0, 0, LCD_WIDTH, 48, theme().header);
+  drawText(16, 16, "PRECISIONSHOT", theme().accent, 2);
+  drawText(LCD_WIDTH - textWidth(pageName) - 16, 20, pageName, theme().muted);
 }
 
-void drawHitButton(bool pressed) {
-  fillRect(HIT_X, HIT_Y, HIT_W, HIT_H, pressed ? ACCENT_DARK : ACCENT);
-  drawText(phoneConnected ? 126 : 84, HIT_Y + 22,
-           phoneConnected ? "SEND TEST HIT" : "START BLE SEARCH", TEXT_DARK, 2);
+void drawConnectionDot(int x, int y) {
+  fillCircle(x, y, 5, phoneConnected ? theme().success : theme().accent);
 }
 
-void drawUi() {
-  fillScreen(BACKGROUND);
-  fillRect(0, 0, LCD_WIDTH, 44, HEADER);
-  drawText(16, 15, "PRECISIONSHOT BLE DEBUG", ACCENT, 2);
-  drawStatus();
-  drawActivity();
-  drawHitButton(false);
+void drawMenuBubble() {
+  fillCircle(BUBBLE_X + 2, BUBBLE_Y + 3, BUBBLE_RADIUS, theme().background);
+  fillCircle(BUBBLE_X, BUBBLE_Y, BUBBLE_RADIUS,
+             menuOpen ? theme().accentPressed : theme().accent);
+
+  if (menuOpen) {
+    for (int offset = -8; offset <= 8; ++offset) {
+      fillRect(BUBBLE_X + offset - 1, BUBBLE_Y + offset - 1, 3, 3,
+               theme().onAccent);
+      fillRect(BUBBLE_X + offset - 1, BUBBLE_Y - offset - 1, 3, 3,
+               theme().onAccent);
+    }
+  } else {
+    fillRect(BUBBLE_X - 10, BUBBLE_Y - 8, 20, 3, theme().onAccent);
+    fillRect(BUBBLE_X - 10, BUBBLE_Y - 1, 20, 3, theme().onAccent);
+    fillRect(BUBBLE_X - 10, BUBBLE_Y + 6, 20, 3, theme().onAccent);
+  }
+}
+
+void drawClassicPage() {
+  fillScreen(theme().background);
+  drawHeader("CLASSIC MODE");
+
+  fillRect(16, 64, 136, 84, theme().surface);
+  drawText(28, 78, "SHOT COUNT", theme().muted);
+  char countText[12];
+  snprintf(countText, sizeof(countText), "%lu",
+           static_cast<unsigned long>(shotCount));
+  drawCenteredText(16, 136, 103, countText, theme().text, 4);
+
+  fillRect(RESET_X, RESET_Y, RESET_W, RESET_H, theme().surfaceAlt);
+  drawCenteredText(RESET_X, RESET_W, RESET_Y + 18, "RESET", theme().danger, 2);
+  drawCenteredText(RESET_X, RESET_W, RESET_Y + 49, "SESSION", theme().muted);
+
+  fillRect(SCORE_X, SCORE_Y, SCORE_W, SCORE_H, theme().surface);
+  drawText(SCORE_X + 16, SCORE_Y + 14, "LAST SHOT SCORE", theme().muted);
+  char scoreText[5];
+  if (hasShot) {
+    snprintf(scoreText, sizeof(scoreText), "%d", lastShotScore);
+  } else {
+    strcpy(scoreText, "--");
+  }
+  drawCenteredText(SCORE_X, SCORE_W, SCORE_Y + 53, scoreText,
+                   theme().accent, 8);
+  drawCenteredText(SCORE_X, SCORE_W, SCORE_Y + 150,
+                   "TAP CARD FOR TEST SHOT", theme().muted);
+
+  fillRect(16, 258, 368, 46, theme().surface);
+  drawConnectionDot(34, 281);
+  drawText(50, 276, "BLUETOOTH", theme().muted);
+  drawText(126, 276, phoneConnected ? "CONNECTED" : "READY TO PAIR",
+           theme().text);
+  drawMenuBubble();
+}
+
+void drawToggle() {
+  constexpr int x = 385;
+  constexpr int y = 207;
+  constexpr int width = 62;
+  constexpr int height = 34;
+  fillPill(x, y, width, height,
+           darkMode ? theme().accent : theme().surfaceAlt);
+  fillCircle(darkMode ? x + width - 17 : x + 17, y + height / 2, 12,
+             darkMode ? theme().onAccent : theme().muted);
+}
+
+void drawSettingsPage() {
+  fillScreen(theme().background);
+  drawHeader("SETTINGS");
+
+  fillRect(16, 64, 448, 112, theme().surface);
+  drawText(28, 78, "BLUETOOTH", theme().muted);
+  drawConnectionDot(34, 112);
+  drawText(50, 105, phoneConnected ? "CONNECTED" : "READY TO PAIR",
+           theme().text, 2);
+  drawText(28, 147, "DEVICE  PRECISIONSHOT", theme().muted);
+
+  fillRect(BLE_ACTION_X, BLE_ACTION_Y, BLE_ACTION_W, BLE_ACTION_H,
+           phoneConnected ? theme().surfaceAlt : theme().accent);
+  drawCenteredText(BLE_ACTION_X, BLE_ACTION_W, BLE_ACTION_Y + 17,
+                   phoneConnected ? "LINKED" : "SEARCH",
+                   phoneConnected ? theme().success : theme().onAccent, 2);
+  if (!phoneConnected) {
+    drawCenteredText(BLE_ACTION_X, BLE_ACTION_W, BLE_ACTION_Y + 43,
+                     bleAdvertisingActive ? "ADVERTISING" : "RESTART BLE",
+                     theme().onAccent);
+  }
+
+  fillRect(THEME_ROW_X, THEME_ROW_Y, THEME_ROW_W, THEME_ROW_H,
+           theme().surface);
+  drawText(28, 204, "DARK MODE", theme().text, 2);
+  drawText(28, 232, darkMode ? "DARK THEME ACTIVE" : "LIGHT THEME ACTIVE",
+           theme().muted);
+  drawToggle();
+
+  char activity[32];
+  snprintf(activity, sizeof(activity), "LINKS %lu  MESSAGES %lu",
+           static_cast<unsigned long>(connectionCount),
+           static_cast<unsigned long>(rxCount));
+  drawText(18, 284, activity, theme().muted);
+  drawMenuBubble();
+}
+
+void drawMenu() {
+  fillRect(MENU_X - 6, 0, 6, LCD_HEIGHT, theme().surfaceAlt);
+  fillRect(MENU_X, 0, LCD_WIDTH - MENU_X, LCD_HEIGHT, theme().surface);
+  drawText(MENU_X + 18, 24, "MENU", theme().text, 2);
+
+  const bool classicActive = currentPage == Page::Classic;
+  fillRect(MENU_X + 12, MENU_CLASSIC_Y, 186, MENU_ITEM_H,
+           classicActive ? theme().accent : theme().surfaceAlt);
+  fillRect(MENU_X + 12, MENU_SETTINGS_Y, 186, MENU_ITEM_H,
+           classicActive ? theme().surfaceAlt : theme().accent);
+  drawText(MENU_X + 28, MENU_CLASSIC_Y + 24, "CLASSIC MODE",
+           classicActive ? theme().onAccent : theme().text);
+  drawText(MENU_X + 28, MENU_SETTINGS_Y + 24, "SETTINGS",
+           classicActive ? theme().text : theme().onAccent);
+
+  drawConnectionDot(MENU_X + 24, 229);
+  drawText(MENU_X + 38, 224, phoneConnected ? "BLE CONNECTED" : "BLE READY",
+           theme().muted);
+  drawMenuBubble();
+}
+
+void renderScreen() {
+  if (currentPage == Page::Classic) {
+    drawClassicPage();
+  } else {
+    drawSettingsPage();
+  }
+  if (menuOpen) drawMenu();
 }
 
 uint8_t readTouchRegister(uint8_t reg) {
@@ -293,6 +456,7 @@ bool inside(uint16_t x, uint16_t y, int left, int top, int width, int height) {
 class ServerCallbacks final : public BLEServerCallbacks {
   void onConnect(BLEServer *) override {
     phoneConnected = true;
+    bleAdvertisingActive = false;
     connectionChanged = true;
     Serial.println("[BLE] Phone connected");
   }
@@ -343,6 +507,7 @@ void initializeBle() {
   bleAdvertising->addServiceUUID(SERVICE_UUID);
   bleAdvertising->setScanResponse(true);
   bleAdvertising->start();
+  bleAdvertisingActive = true;
 
   Serial.printf("[BLE] Advertising as %s\n", DEVICE_NAME);
   Serial.printf("[BLE] Service: %s\n", SERVICE_UUID);
@@ -350,35 +515,97 @@ void initializeBle() {
   Serial.printf("[BLE] RX write: %s\n", RX_UUID);
 }
 
+void startAdvertising() {
+  if (phoneConnected || bleAdvertising == nullptr) return;
+  bleAdvertising->stop();
+  bleAdvertising->start();
+  bleAdvertisingActive = true;
+  Serial.println("[BLE] Advertising restarted");
+}
+
+void resetSession() {
+  shotCount = 0;
+  lastShotScore = 0;
+  hasShot = false;
+  Serial.println("[SESSION] Classic session reset");
+  renderScreen();
+}
+
 void sendTestHit() {
-  if (!phoneConnected) {
-    bleAdvertising->stop();
-    bleAdvertising->start();
-    Serial.println("[BLE] Advertising restarted by touchscreen");
-    drawStatus();
-    drawHitButton(true);
+  ++shotCount;
+  lastShotScore = 10 - ((shotCount - 1) % 4);
+  hasShot = true;
+
+  if (phoneConnected) {
+    char packet[21];
+    // Keep the diagnostic notification within the default 20-byte payload.
+    snprintf(packet, sizeof(packet), "{\"hit\":%lu,\"score\":%d}",
+             static_cast<unsigned long>(shotCount % 10), lastShotScore);
+    txCharacteristic->setValue(reinterpret_cast<uint8_t *>(packet), strlen(packet));
+    txCharacteristic->notify();
+    Serial.printf("[BLE TX] %s (%u bytes)\n", packet,
+                  static_cast<unsigned>(strlen(packet)));
+  } else {
+    restartAdvertising = true;
+    Serial.printf("[SHOT] Test shot %lu scored %d; no phone connected\n",
+                  static_cast<unsigned long>(shotCount), lastShotScore);
+  }
+  renderScreen();
+}
+
+void handleMenuTouch(uint16_t x, uint16_t y) {
+  if (x < MENU_X) {
+    menuOpen = false;
+  } else if (inside(x, y, MENU_X + 12, MENU_CLASSIC_Y, 186, MENU_ITEM_H)) {
+    currentPage = Page::Classic;
+    menuOpen = false;
+  } else if (inside(x, y, MENU_X + 12, MENU_SETTINGS_Y, 186, MENU_ITEM_H)) {
+    currentPage = Page::Settings;
+    menuOpen = false;
+  }
+  renderScreen();
+}
+
+void handleTouch(uint16_t x, uint16_t y) {
+  Serial.printf("[TOUCH] %u, %u\n", x, y);
+
+  if (inside(x, y, BUBBLE_X - BUBBLE_RADIUS - 4,
+             BUBBLE_Y - BUBBLE_RADIUS - 4,
+             BUBBLE_RADIUS * 2 + 8, BUBBLE_RADIUS * 2 + 8)) {
+    menuOpen = !menuOpen;
+    renderScreen();
     return;
   }
 
-  ++hitCount;
-  const int score = 10 - ((hitCount - 1) % 4);
-  char packet[21];
-  // Stay within the default 20-byte BLE notification payload so this test
-  // works even before the phone negotiates a larger MTU.
-  snprintf(packet, sizeof(packet), "{\"hit\":%lu,\"score\":%d}",
-           static_cast<unsigned long>(hitCount % 10), score);
-  txCharacteristic->setValue(reinterpret_cast<uint8_t *>(packet), strlen(packet));
-  txCharacteristic->notify();
-  Serial.printf("[BLE TX] %s (%u bytes)\n", packet, static_cast<unsigned>(strlen(packet)));
-  drawActivity();
-  drawHitButton(true);
+  if (menuOpen) {
+    handleMenuTouch(x, y);
+    return;
+  }
+
+  if (currentPage == Page::Classic) {
+    if (inside(x, y, RESET_X, RESET_Y, RESET_W, RESET_H)) {
+      resetSession();
+    } else if (inside(x, y, SCORE_X, SCORE_Y, SCORE_W, SCORE_H)) {
+      sendTestHit();
+    }
+    return;
+  }
+
+  if (inside(x, y, BLE_ACTION_X, BLE_ACTION_Y, BLE_ACTION_W, BLE_ACTION_H)) {
+    if (!phoneConnected) startAdvertising();
+    renderScreen();
+  } else if (inside(x, y, THEME_ROW_X, THEME_ROW_Y,
+                    THEME_ROW_W, THEME_ROW_H)) {
+    darkMode = !darkMode;
+    renderScreen();
+  }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(250);
   Serial.println();
-  Serial.println("=== PrecisionShot BLE diagnostic boot ===");
+  Serial.println("=== PrecisionShot UI + BLE boot ===");
 
   pinMode(PIN_SD_CS, OUTPUT);
   pinMode(PIN_LCD_CS, OUTPUT);
@@ -403,50 +630,48 @@ void setup() {
   Wire.begin(PIN_TOUCH_SDA, PIN_TOUCH_SCL, 400000);
   Serial.printf("[TOUCH] FT6336 chip ID: 0x%02X\n", readTouchRegister(0xA3));
 
-  drawUi();
   initializeBle();
-  Serial.println("[READY] Scan for PrecisionShot from the phone");
+  renderScreen();
+  Serial.println("[READY] PrecisionShot Classic Mode started");
 }
 
 void loop() {
   if (restartAdvertising) {
     restartAdvertising = false;
     delay(100);
-    bleAdvertising->start();
-    Serial.println("[BLE] Advertising restarted");
+    startAdvertising();
+    renderScreen();
   }
 
   if (connectionChanged) {
     connectionChanged = false;
     if (phoneConnected) ++connectionCount;
-    drawStatus();
-    drawHitButton(false);
+    renderScreen();
   }
 
   if (rxChanged) {
+    char received[sizeof(lastRx)];
     portENTER_CRITICAL(&bleMux);
+    strcpy(received, lastRx);
     rxChanged = false;
     portEXIT_CRITICAL(&bleMux);
     ++rxCount;
-    drawActivity();
 
-    if (phoneConnected && strcmp(lastRx, "PING") == 0) {
+    if (phoneConnected && strcmp(received, "PING") == 0) {
       txCharacteristic->setValue("{\"pong\":1}");
       txCharacteristic->notify();
       Serial.println("[BLE TX] {\"pong\":1}");
+    } else if (strcmp(received, "RESET") == 0) {
+      resetSession();
+    } else if (currentPage == Page::Settings) {
+      renderScreen();
     }
   }
 
   uint16_t x = 0;
   uint16_t y = 0;
   const bool touchIsDown = readTouch(x, y);
-  if (touchIsDown && !touchWasDown && inside(x, y, HIT_X, HIT_Y, HIT_W, HIT_H)) {
-    buttonPressed = true;
-    sendTestHit();
-  } else if (!touchIsDown && touchWasDown && buttonPressed) {
-    buttonPressed = false;
-    drawHitButton(false);
-  }
+  if (touchIsDown && !touchWasDown) handleTouch(x, y);
   touchWasDown = touchIsDown;
   delay(15);
 }
