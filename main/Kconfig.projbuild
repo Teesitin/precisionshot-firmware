@@ -1,0 +1,9 @@
+menu "PrecisionShot diagnostics"
+    config PRECISIONSHOT_SELF_TEST
+        bool "Run UI/session tests and capture screen frames at startup"
+        default n
+        help
+            Diagnostic build only. Exercises UI actions and dumps framebuffer
+            snapshots over USB before restoring the initial session. Disable
+            for normal device use.
+endmenu

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "menu",
+    "label": "Menu",
+    "google_icon": "menu",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/menu/materialicons/24px.svg"
+  },
+  {
+    "id": "fullscreen",
+    "label": "Fullscreen",
+    "google_icon": "fullscreen",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/fullscreen/materialicons/24px.svg"
+  },
+  {
+    "id": "close",
+    "label": "Close",
+    "google_icon": "close",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/close/materialicons/24px.svg"
+  },
+  {
+    "id": "freestyle",
+    "label": "Freestyle",
+    "google_icon": "adjust",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/image/adjust/materialicons/24px.svg"
+  },
+  {
+    "id": "classic",
+    "label": "Classic",
+    "google_icon": "format_list_numbered",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/editor/format_list_numbered/materialicons/24px.svg"
+  },
+  {
+    "id": "settings",
+    "label": "Settings",
+    "google_icon": "settings",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/action/settings/materialicons/24px.svg"
+  },
+  {
+    "id": "distance",
+    "label": "Distance",
+    "google_icon": "straighten",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/image/straighten/materialicons/24px.svg"
+  },
+  {
+    "id": "calibration",
+    "label": "Calibration",
+    "google_icon": "tune",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/image/tune/materialicons/24px.svg"
+  },
+  {
+    "id": "debug_hit",
+    "label": "Debug +Hit",
+    "google_icon": "add_circle",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/content/add_circle/materialicons/24px.svg"
+  },
+  {
+    "id": "session_debug",
+    "label": "Session Debug",
+    "google_icon": "bug_report",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/action/bug_report/materialicons/24px.svg"
+  },
+  {
+    "id": "sun",
+    "label": "Light theme",
+    "google_icon": "wb_sunny",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/image/wb_sunny/materialicons/24px.svg"
+  },
+  {
+    "id": "moon",
+    "label": "Dark theme",
+    "google_icon": "brightness_2",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/image/brightness_2/materialicons/24px.svg"
+  },
+  {
+    "id": "bluetooth",
+    "label": "Bluetooth",
+    "google_icon": "bluetooth",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/device/bluetooth/materialicons/24px.svg"
+  },
+  {
+    "id": "plus",
+    "label": "Increase",
+    "google_icon": "add",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/content/add/materialicons/24px.svg"
+  },
+  {
+    "id": "minus",
+    "label": "Decrease",
+    "google_icon": "remove",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/content/remove/materialicons/24px.svg"
+  },
+  {
+    "id": "reset",
+    "label": "Reset session",
+    "google_icon": "refresh",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/refresh/materialicons/24px.svg"
+  },
+  {
+    "id": "back",
+    "label": "Back",
+    "google_icon": "arrow_back",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/arrow_back/materialicons/24px.svg"
+  },
+  {
+    "id": "rapid_disabled",
+    "label": "Rapid disabled",
+    "google_icon": "lock",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/action/lock/materialicons/24px.svg"
+  },
+  {
+    "id": "units",
+    "label": "Change units",
+    "google_icon": "swap_horiz",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/action/swap_horiz/materialicons/24px.svg"
+  },
+  {
+    "id": "check",
+    "label": "Confirm / ready",
+    "google_icon": "check",
+    "source": "https://raw.githubusercontent.com/google/material-design-icons/master/src/navigation/check/materialicons/24px.svg"
+  }
+]

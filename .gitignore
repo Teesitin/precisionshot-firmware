@@ -1,4 +1,8 @@
 .pio/
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
 compile_commands.json
 .vscode/
 tmp/

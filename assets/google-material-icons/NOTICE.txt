@@ -1,0 +1,9 @@
+Google Material Icons
+Source: https://github.com/google/material-design-icons
+Licensed under Apache License 2.0; full license in LICENSE.
+Modifications: original SVGs rasterized to 24x24 and thresholded at 50% coverage into 1-bit bitmaps.
+Per-icon source URLs are recorded in manifest.json.
+
+The converted bitmaps are embedded as static artwork in main/icons.h.
+Bitmaps: 72 bytes/icon, 3 bytes/row, MSB first; 1 = foreground.
+Host conversion uses existing Sharp and Pillow; no dependencies were installed.
