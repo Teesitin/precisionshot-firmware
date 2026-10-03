@@ -1,6 +1,7 @@
 #include "hardware.h"
 
 #include <algorithm>
+#include <cstdio>
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/spi_master.h"
@@ -12,18 +13,20 @@
 
 namespace hardware {
 namespace {
-constexpr gpio_num_t SD_CS = GPIO_NUM_4;
-constexpr gpio_num_t MISO = GPIO_NUM_9;
-constexpr gpio_num_t BACKLIGHT = GPIO_NUM_10;
-constexpr gpio_num_t SCLK = GPIO_NUM_11;
-constexpr gpio_num_t MOSI = GPIO_NUM_12;
-constexpr gpio_num_t DC = GPIO_NUM_13;
-constexpr gpio_num_t RESET = GPIO_NUM_14;
-constexpr gpio_num_t LCD_CS = GPIO_NUM_3;
-constexpr gpio_num_t TOUCH_INT = GPIO_NUM_5;
-constexpr gpio_num_t TOUCH_SDA = GPIO_NUM_6;
-constexpr gpio_num_t TOUCH_RESET = GPIO_NUM_7;
-constexpr gpio_num_t TOUCH_SCL = GPIO_NUM_8;
+// Main Board V4, J_LCD: values are GPIO numbers, not WROOM module pad numbers.
+constexpr gpio_num_t SD_CS = GPIO_NUM_18;
+constexpr gpio_num_t MISO = GPIO_NUM_13;
+constexpr gpio_num_t BACKLIGHT = GPIO_NUM_17;
+constexpr gpio_num_t SCLK = GPIO_NUM_12;
+constexpr gpio_num_t MOSI = GPIO_NUM_11;
+constexpr gpio_num_t DC = GPIO_NUM_15;
+constexpr gpio_num_t RESET = GPIO_NUM_16;
+constexpr gpio_num_t LCD_CS = GPIO_NUM_14;
+constexpr gpio_num_t TOUCH_INT = GPIO_NUM_41;
+constexpr gpio_num_t TOUCH_SDA = GPIO_NUM_39;
+constexpr gpio_num_t TOUCH_RESET = GPIO_NUM_42;
+constexpr gpio_num_t TOUCH_SCL = GPIO_NUM_40;
+constexpr int DISPLAY_CLOCK_HZ = 20000000;
 constexpr size_t PIXEL_BUFFER_SIZE = 4096;
 spi_device_handle_t display = nullptr;
 i2c_master_bus_handle_t touchBus = nullptr;
@@ -41,6 +44,10 @@ uint64_t nowMs() {
 }
 
 void initialize() {
+  printf("[BOARD] Main Board V4: LCD MOSI=%d SCK=%d MISO=%d CS=%d DC=%d RST=%d BL=%d SD_CS=%d SPI=%d Hz\n",
+         MOSI, SCLK, MISO, LCD_CS, DC, RESET, BACKLIGHT, SD_CS, DISPLAY_CLOCK_HZ);
+  printf("[BOARD] Touch SDA=%d SCL=%d INT=%d RST=%d\n",
+         TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RESET);
   gpio_config_t outputs = {};
   outputs.pin_bit_mask = (1ULL << SD_CS) | (1ULL << LCD_CS) |
       (1ULL << RESET) | (1ULL << DC) | (1ULL << BACKLIGHT) |
@@ -69,7 +76,8 @@ void initialize() {
   bus.max_transfer_sz = PIXEL_BUFFER_SIZE;
   ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO));
   spi_device_interface_config_t device = {};
-  device.clock_speed_hz = 80000000;
+  // Conservative clock for initial PCB bring-up.
+  device.clock_speed_hz = DISPLAY_CLOCK_HZ;
   device.mode = 0;
   // Keep CS asserted across chunks of a rectangle, as on the original display.
   device.spics_io_num = -1;

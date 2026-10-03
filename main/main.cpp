@@ -536,8 +536,11 @@ extern "C" void app_main() {
   graphics::initialize();
   uint8_t chipId = 0;
   hardware::resetTouch();
-  hardware::readTouchRegisters(0xA3, &chipId, 1);
-  printf("[TOUCH] FT6336 chip ID: 0x%02X\n", chipId);
+  if (hardware::readTouchRegisters(0xA3, &chipId, 1)) {
+    printf("[TOUCH] FT6336 chip ID: 0x%02X\n", chipId);
+  } else {
+    puts("[TOUCH] Chip ID read failed; check display power and touch wiring");
+  }
   bluetooth::initialize();
 #ifdef CONFIG_PRECISIONSHOT_SELF_TEST
   runUiSelfTests();

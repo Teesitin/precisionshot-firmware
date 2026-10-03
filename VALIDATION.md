@@ -1,5 +1,28 @@
 # Training UI validation
 
+## Main Board V4 pin correction (2026-10-02)
+
+- Root cause of the white display: the firmware used the development-board
+  jumper pin map while the display was mounted on Main Board V4. Corrected all
+  12 LCD, touch and SD-select GPIO assignments in `main/hardware.cpp`.
+- Independently checked each firmware GPIO against the supplied
+  `C:/Users/teesitin/Downloads/Main Board V4.brd` net/contact references and the
+  WROOM pad-to-GPIO mapping in the matching September 17 schematic. All 12
+  assignments match, with no duplicate GPIOs. README wiring now describes the PCB.
+- Native ESP-IDF 6.0.2 build passed with project warnings as errors; no Arduino
+  or additional firmware dependencies. LCD SPI remains at the conservative
+  20 MHz bring-up setting. Application size: 682,496 bytes.
+- Flashed bootloader, partition table and application to COM10 on ESP32-S3
+  base MAC `94:A9:90:D2:F7:F0`; esptool verified all three written hashes.
+  No whole-flash erase was performed.
+- Captured a fresh boot: Main Board V4 pin banner, successful FT6336 chip ID
+  read `0x64`, BLE advertising as PrecisionShot, and the normal `[READY]` banner.
+  Chip ID logging now checks the I2C result instead of printing failed-read data.
+- User confirmed the physical screen displays the PrecisionShot interface.
+  Physical touch navigation and BLE interaction were not retested in this pass.
+- Evidence (generated, ignored): `build/pcb-v4-flash.log` and
+  `build/pcb-v4-boot.log`.
+
 ## Debug Zone animation update (2026-09-11)
 
 - Rapid removed from the navigation menu. Settings now includes Debug Zone.

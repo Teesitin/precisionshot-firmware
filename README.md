@@ -113,24 +113,28 @@ The phone's current shot parser remains unchanged. These extra records can be
 viewed as diagnostic messages, and do not imply the phone has new settings UI.
 The original Bluetooth address allocation and GATT UUIDs are preserved.
 
-## Wiring
+## Wiring — Main Board V4
+
+The firmware targets the PCB's `J_LCD` connector, verified against
+`Main Board V4.brd`. These are ESP32 GPIO numbers, not WROOM module pad
+numbers. The earlier development-board jumper wiring is not compatible.
 
 | Signal | GPIO |
 |---|---:|
-| SD CS (held inactive) | 4 |
-| Display MISO | 9 |
-| Backlight | 10 |
-| Display SCLK | 11 |
-| Display MOSI | 12 |
-| Display D/C | 13 |
-| Display reset | 14 |
-| Display CS | 3 |
-| Touch interrupt | 5 |
-| Touch SDA | 6 |
-| Touch reset | 7 |
-| Touch SCL | 8 |
+| SD CS (held inactive) | 18 |
+| Display MISO | 13 |
+| Backlight | 17 |
+| Display SCLK | 12 |
+| Display MOSI | 11 |
+| Display D/C | 15 |
+| Display reset | 16 |
+| Display CS | 14 |
+| Touch interrupt | 41 |
+| Touch SDA | 39 |
+| Touch reset | 42 |
+| Touch SCL | 40 |
 
-Display SPI is mode 0, MSB first, 80 MHz on SPI2. The project-owned ST7796S
+Display SPI is mode 0, MSB first, 20 MHz on SPI2 for PCB bring-up. The project-owned ST7796S
 initialization, RGB565 byte order, palettes, glyphs, and layout are retained.
 Touch uses I2C0 at 400 kHz, address 0x38, repeated-start register reads, and
 the existing portrait-to-landscape coordinate mapping.
