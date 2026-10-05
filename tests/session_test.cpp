@@ -49,12 +49,14 @@ static void missesAndLimits() {
     session.recordShot(std::numeric_limits<unsigned>::max());
     assert(session.lastScore == 10 && session.total == 10);
     session.reset();
-    for (unsigned i = 0; i < 10; ++i) session.recordShot(10);
+    for (unsigned i = 0; i < 10; ++i)
+        session.recordShot(10);
     assert(session.complete && session.displayScore() == 100);
     session.recordShot(0);
     assert(!session.complete && session.shots == 1 && session.total == 0);
     session.reset();
-    for (unsigned i = 0; i < 10; ++i) session.recordShot(0);
+    for (unsigned i = 0; i < 10; ++i)
+        session.recordShot(0);
     assert(session.complete && session.displayScore() == 0);
 }
 

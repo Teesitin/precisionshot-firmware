@@ -8,7 +8,7 @@ namespace training {
 enum class Mode { Freestyle, Classic };
 enum class Unit { Meters, Feet };
 
-// Pure session logic shared by the normal and full-screen views.
+// Scores shared by the normal and fullscreen views.
 struct Session {
     Mode mode = Mode::Classic;
     uint32_t shots = 0;
@@ -29,17 +29,17 @@ struct Settings {
     static constexpr int kMaximumDistanceMillimeters = 100000;
     static constexpr unsigned kMaximumSensitivity = 4095;
 
-    // Unit changes affect presentation only, preserving the physical distance.
+    // Changing units does not change the actual distance.
     int distanceMillimeters = 10000;
     unsigned sensitivity = 1000;
     Unit unit = Unit::Meters;
 
     // Each step changes the distance by one meter or approximately one foot.
     void adjustDistance(int steps);
-    // Each step changes the raw threshold by 100 ADC counts.
+    // Each step changes the sensor threshold by 100.
     void adjustSensitivity(int steps);
     void toggleUnit();
-    void formatDistance(char* buffer, size_t size) const;
+    void formatDistance(char *buffer, size_t size) const;
 };
 
-}  // namespace training
+} // namespace training

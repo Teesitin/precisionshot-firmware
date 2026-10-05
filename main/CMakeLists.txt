@@ -1,10 +1,24 @@
+# Firmware source files and the ESP-IDF drivers they use.
 idf_component_register(
-    SRCS "main.cpp" "hardware.cpp" "bluetooth.cpp" "graphics.cpp" "session.cpp"
+    SRCS
+        "main.cpp"
+        "hardware.cpp"
+        "bluetooth.cpp"
+        "graphics.cpp"
+        "session.cpp"
+        "sensors.cpp"
+        "music/entertainer.cpp"
+        "music/mountain_king.cpp"
+        "music/fur_elise.cpp"
+        "music/greensleeves.cpp"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_gpio esp_driver_spi esp_driver_i2c esp_timer bt nvs_flash freertos
+    REQUIRES
+        esp_driver_gpio esp_driver_spi esp_driver_i2c esp_driver_ledc
+        esp_timer bt nvs_flash freertos esp_adc
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
 
+# Only add the startup tests when diagnostics are enabled.
 if(CONFIG_PRECISIONSHOT_SELF_TEST)
     target_sources(${COMPONENT_LIB} PRIVATE "../tests/session_test.cpp")
     set_source_files_properties("../tests/session_test.cpp" PROPERTIES

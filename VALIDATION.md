@@ -152,3 +152,132 @@ Debug are the values at the time of the last simulated shot. The ordinary shot
 notification remains the existing app-compatible score packet. No actual shot
 location, battery telemetry or calibration success is fabricated. Settings and
 session state currently reset to defaults on reboot.
+
+## Speaker debug test — October 5, 2026
+
+- Main Board V4.brd: SPK connects U1 pad 36 (GPIO44) to LM386 pin 3; both SPK1/SPK2 share the amplifier output through C10.
+- Added Settings -> Debug Zone speaker test: three 4 kHz, 150 ms beeps with 150 ms gaps, nonblocking timing and repeat-tap guard.
+- ESP-IDF 6.0.2 esp32s3 build passed; image size 0xa8a50, 34% app partition free. Git whitespace check passed.
+- No flashing or hardware playback performed, per user request. Physical touch target and audible output from each speaker remain to be checked.
+
+## Public-domain melody files — October 5, 2026
+
+- Retained four Mutopia LilyPond scores; each edition declares Public Domain.
+- Converted monophonic excerpts into separate native C++ frequency/duration
+  tables: Entertainer 4000 ms, Mountain King 6957 ms, Fur Elise 3438 ms,
+  Greensleeves 6000 ms. Sources, attribution, and conversion choices are in
+  main/music/README.md and generate_excerpts.py.
+- Generalized the existing nonblocking speaker sequencer to support pitched
+  notes, rests, cancellation, and busy rejection. The original three-beep
+  sequence remains three 150 ms 4 kHz tones separated by 150 ms rests.
+- ESP-IDF 6.0.2 esp32s3 build passed; binary 0xa8cb0, 34% partition free.
+  Verified generated files match the transcription data, all event durations
+  are positive, pitches are in supported bounds, and total durations match.
+- Animation buttons are not wired to melody playback yet. No flashing or
+  physical sound checks performed. Build log: build/music-build.log.
+
+## Debug Zone animation music — October 5, 2026
+
+- Connected Confetti to The Entertainer, Orbit to Greensleeves, Bounce to Fur
+  Elise, and Warp to Mountain King; the picker displays each tune's name.
+- Preserved the user's latest single 150 ms, 2 kHz speaker-test beep and label.
+- Orbit runs six seconds and Warp 6957 ms so their full excerpts finish;
+  Confetti and Bounce retain five seconds. Updated the remaining-time bar.
+  Starting an animation replaces an active beep, and close/page exit/end
+  silences the sequencer.
+- Updated optional embedded UI checks for longer durations, active music and
+  cancellation. These device checks were not run; no flashing was performed.
+- Normal ESP-IDF 6.0.2 esp32s3 build passed, binary 0xa8fc0, 34% partition free.
+  Whitespace checks passed. Log: build/animation-music-build.log. Physical
+  animation, tune playback, and perceived beep pitch remain to be checked.
+
+## Code cleanup — October 5, 2026
+
+- Used four-space indentation in our C++ code, headers, and test files. Added
+  .clang-format and kept generated icon bytes in compact rows.
+- Added short section comments and simplified existing comments. Shortened the
+  main README with a project overview, current features, GPIO count/table,
+  build commands, and file guide. Moved detailed Bluetooth notes to docs/BLE.md.
+  Music credits and original score files are retained.
+- Compared all 18 C++ source/header/include files against the working code
+  before cleanup: code tokens are identical after removing comments/spacing.
+  No functional bug fixes or behavior changes were needed for this pass.
+- Formatter checks passed. The Python generator parses and matches all four
+  formatted tune files. Project code has no tabs, README links exist, and Git
+  whitespace checks passed.
+- Final ESP-IDF 6.0.2 esp32s3 build passed: binary 0xa8fc0, 34% partition free.
+  Log: build/cleanup-final-build.log. Nothing was flashed. Physical checks and
+  optional startup device tests were not rerun during this cleanup.
+
+## Connected app and production screens — October 5, 2026
+
+- Training keeps Settings, Reset, and DEBUG +HIT. Session Debug, packet views,
+  animation tunes, and the beep test are inside Settings → Debug Zone.
+- Added numbered commands and complete version-2 state snapshots for the app.
+  The board sends touchscreen changes too. Notifications are queued and paced;
+  BEGIN/END protect partial updates, and ACK identifies a confirmed command.
+- The on-board BLE acceptance run passed 71 confirmed commands and 1517
+  notifications: Classic completion/rollover, Freestyle, reset, settings,
+  navigation, fullscreen, packet tabs, all four tunes, stop, beep, rejection,
+  and reconnect. An earlier run was interrupted by the user touching the board;
+  the untouched repeat passed. Log: build/connected-ble-tests.log.
+- Added the stored debug packet and its delivery status to snapshots. A final
+  read-only STATE request passed against the production board, and the app's
+  parser accepted its exact packet and empty session. This check played no sound.
+- Startup diagnostics captured the revised screens but hit the old animation
+  timing assertion after Orbit. The allowance now includes the final frame and
+  picker redraw. The repeat was stopped at the user's request because of the
+  loud beeper; the full startup UI test was not completed.
+- Restored and flashed the normal build on COM10. Startup tests are disabled
+  in generated configuration and absent from the ELF symbols. Esptool verified
+  written data. Binary: 0xa9b20 (695072 bytes), 34% app partition free.
+  Logs: build/connected-build.log and build/connected-production-flash.log.
+- Four-space formatter and whitespace checks passed. No further sound or
+  animation tests were run after the user requested they stop.
+# Regulator and sensor input update — 2026-10-05
+
+- Checked regulator and Main Board V4 netlists: MCP9700 outputs use GPIO9/10;
+  PSB_ANALOG uses GPIO1, J_PSB pin 9.
+- ESP-IDF 6.0.2 build passed; normal startup tests remain disabled.
+- Flashed COM10 successfully, with esptool verifying written hashes.
+- Read three complete 24-field BLE snapshots using STATE only. Temperatures
+  were 31.9–32.6 C and 41.3–41.4 C; sensor input was 136–208 mV, below threshold.
+- The phone's real parser accepted all captured snapshots. No sound or
+  animation tests were run. Temperature accuracy and applied-voltage threshold
+  crossing still need physical checks with a reference meter/source.
+# Debug Zone layout and refresh update — 2026-10-05
+
+- Moved readings into temperature and sensor panels above compact animation
+  buttons. Updated touch bounds to match, with Session Debug and Stop Sound below.
+- Removed the standalone beep button. Refresh and sampling have no sound calls.
+- Sampling runs every 200 ms; automatic BLE state publishing is paced at 300 ms
+  to leave room for commands. Forced command responses still publish immediately.
+- ESP-IDF build and COM10 flash passed, with written hashes verified.
+- Three live BLE snapshots passed quietly: SOUND stayed 0 and FX stayed NONE.
+  Detection reflected raw ADC values above and below the threshold.
+- No board UI or sound tests were run, following the user's earlier request.
+# Idle speaker investigation — 2026-10-05
+
+- User reports beep noise on each screen update despite SOUND:0.
+- Removed the standalone test-beep routine, including legacy SOUND:TEST playback.
+  Deliberately selected music remains available.
+- Idle PWM is stopped and disconnected; GPIO44 is held low at boot and stop.
+- Build and COM10 flash passed, with written hashes verified.
+- Acoustic silence is awaiting the user's check after the final flash. Noise
+  coupling from display activity through the amplifier or supply is possible.
+- User confirmed noise persists after the final flash and occurs on every
+  screen update. Software changes did not resolve the audible symptom.
+  Main Board V4 C6 is 10 uF across LM386 pins 1/8, selecting gain 200;
+  reduced gain and amplifier supply/ground isolation need a physical check.
+# Phone sensor watch and command sync — 2026-10-05
+
+- Sensor fields are omitted unless the phone requests WATCH:1. WATCH:0,
+  disconnect, and ten-second lease expiry stop sensor traffic. Core state remains.
+- Notifications drain up to eight records per loop; read-only STATE/WATCH
+  commands no longer force a display redraw.
+- Build and COM10 flash passed, with hashes verified.
+- Quiet hardware test passed 30 matched state/ACK confirmations under active
+  telemetry; maximum observed latency was 0.391 s. Stop, expiry, and reconnect
+  checks passed. No scores, modes, pages, fullscreen, sound, or animations changed.
+- No touchscreen action or audio tests were run. Shared state serialization
+  still publishes local firmware actions and remote command results.

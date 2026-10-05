@@ -1,176 +1,100 @@
 # PrecisionShot firmware
 
-Native C++ firmware for the ESP32-S3 and Hosyond ST7796S/FT6336 touchscreen.
-Build with **ESP-IDF 6.0.2**. Only the official SDK and standard C/C++ are
-dependencies; no Arduino, third-party firmware libraries, graphics framework,
-or managed components are used. Component Manager is disabled by CMake.
+PrecisionShot is our laser target training project. This repository runs the
+ESP32-S3 main board, touchscreen, Bluetooth connection, and two piezo speakers.
+We use C++ with **ESP-IDF 6.0.2**, without Arduino or extra firmware libraries.
+
+## What works now
+
+- **Freestyle:** keep shooting and show the latest score.
+- **Classic:** ten shots per round, with a final total out of 100.
+- **Settings:** distance, meters/feet, sensitivity, light/dark theme, and Bluetooth.
+- **Debug Zone (inside Settings):** Session Debug, packet views, speaker test,
+  and four animations with public-domain tunes.
+
+The phone app can control the same scores, settings, screens, and tests. Changes
+made on the touchscreen are also sent to the phone. Rapid is not available yet.
+
+`DEBUG +HIT` creates test scores. The real sensor scanning is still to be added.
+Settings and scores reset when the board restarts. SD logging and battery
+readings are also planned.
+
+## Board and pins
+
+Main Board V4 uses an **ESP32-S3-WROOM-1-N8R8** and a 4-inch **ST7796S** display
+with **FT6336** touch. The screen runs at **480 x 320** in landscape mode.
+
+The firmware uses **13 GPIOs** for the display, touch, speaker, and inactive SD
+chip select. Native USB uses two more. These are ESP32 GPIO numbers, not module
+pad numbers.
+
+| Connection | GPIO |
+|---|---:|
+| Display MOSI | 11 |
+| Display clock | 12 |
+| Display MISO | 13 |
+| Display chip select | 14 |
+| Display data/command | 15 |
+| Display reset | 16 |
+| Display backlight | 17 |
+| SD chip select (held inactive) | 18 |
+| Touch SDA | 39 |
+| Touch SCL | 40 |
+| Touch interrupt | 41 |
+| Touch reset | 42 |
+| Speaker signal | 44 |
+| USB D- / D+ | 19 / 20 |
+
+The display and LM386 amplifier use the 5 V supply; the ESP32 uses 3.3 V.
+Both speakers share the LM386 output, so they play the same sound. The speaker
+signal is GPIO44, which is pad 36 on the module. The test button plays one
+150 ms beep at 2 kHz.
 
 ## Build and flash
 
-From an ESP-IDF 6.0.2 terminal in this repository:
-
-```text
-idf.py set-target esp32s3
-idf.py build
-idf.py -p COM6 flash
-idf.py -p COM6 monitor
-```
-
-Use the device's actual port if Windows assigns a different one. Exit the
-monitor with Ctrl+]. The console uses the ESP32-S3's native USB Serial/JTAG
-port at 115200 baud. The defaults select 8 MB flash, DIO, one factory app,
-and an 8 KB main-task stack. CPU speed is 240 MHz. Two universal MAC addresses
-preserve the previous Bluetooth identity (factory base MAC + 1). PSRAM is not
-required by this prototype. The attached development board reports 16 MB of
-physical flash; the firmware intentionally uses the 8 MB project configuration.
-Flashing replaces the bootloader, partition table, and application; it does
-not run a whole-flash erase. Do not run a flash erase to fix an NVS error
-without first identifying whether stored data needs to be retained.
-
-On this Windows workstation, activate the installed SDK with:
+Open an ESP-IDF 6.0.2 terminal in this folder. On our Windows computer, load it
+with:
 
 ```powershell
 . C:\Espressif\tools\Microsoft.v6.0.2.PowerShell_profile.ps1
 ```
 
-## Training screens and controls
+Then build, flash, or view the serial log:
 
-- **Freestyle:** unlimited shots; normal and fullscreen views show the last score.
-- **Classic:** counts down from 10 shots. Shot 10 leaves the total out of 100 on
-  screen. The next incoming shot starts a new round and counts as shot 1.
-- **Fullscreen:** mode title at top left, close at top right, large centered
-  score. Classic shows shots remaining at bottom left until the round completes.
-- **DEBUG +HIT:** bottom-right button in both normal and fullscreen training
-  views, and in Session Debug. Generates a simulated incoming score cycling
-  10, 9, 8, 7. A held finger generates only one hit until released.
-- **Menu:** eased slide animation for Freestyle, Classic, Settings and Session
-  Debug. Rapid is removed from the menu.
-- **Settings:** distance from 1 to 100 meters (or equivalent feet), unit toggle,
-  calibration sensitivity from 0 to 4095 in steps of 100, theme toggle, and BLE
-  advertising restart. Higher sensitivity-threshold values mean less sensitive
-  detection. Unit toggles preserve the stored physical distance.
-- **Session Debug:** tabs show the exact latest shot payload as JSON text, hex,
-  or binary bytes, including offline previews. A metadata row records the mode,
-  shot number, total, distance and sensitivity at the time of that test shot.
-  Delivery status distinguishes offline, unsubscribed, queued and failed;
-  queued means accepted by the SDK, not acknowledged by the phone.
-
-- **Settings > Debug Zone:** four animation buttons (Confetti Chaos, Cosmic
-  Orbit, Jelly Bounce, Warp Speed) preview `HIGHSCORE XXX` for five seconds,
-  then return to the picker. Close cancels playback; close again returns to
-  Settings. These are visual demos and do not record shots or change scores.
-  Animation timing is nonblocking so the main loop continues servicing touch
-  and Bluetooth. The bottom bar shows time remaining.
-
-The initial debug packet is explicitly an unsent example. Physical laser
-scanning and ambient-baseline calibration are not connected yet; the adjustable
-threshold is configuration for that future detection path. Distance and
-calibration controls work locally and through the commands below. Settings,
-themes, and session state currently return to defaults on reboot. Battery
-monitoring, shot-location plots and SD logging remain future integration work.
-
-## BLE contract
-
-| Attribute | UUID | Access / initial value |
-|---|---|---|
-| Service | `8c7a0001-6c3b-4f3d-a8d9-2adbc9f10211` | Primary service |
-| TX | `8c7a0002-6c3b-4f3d-a8d9-2adbc9f10211` | Read, notify / `READY` |
-| RX | `8c7a0003-6c3b-4f3d-a8d9-2adbc9f10211` | Read, write, write without response / `WRITE PING` |
-
-Subscribe to TX before expecting notifications. The local MTU is 185, but
-outgoing records remain at most 20 bytes for default-MTU clients. Each test shot
-keeps the app-compatible `{"hit":N,"score":S}` JSON notification, where N is the
-shot-count digit modulo 10 (the tenth Classic shot uses 0). The complete count
-and total are kept in the session; each score stays in the 0..10 range.
-
-Example final payload and its exact bytes:
-
-```text
-Text: {"hit":1,"score":10}
-Hex:  7B 22 68 69 74 22 3A 31 2C 22 73 63 6F 72 65 22 3A 31 30 7D
-Bits: 01111011 00100010 01101000 01101001 01110100
-      00100010 00111010 00110001 00101100 00100010
-      01110011 01100011 01101111 01110010 01100101
-      00100010 00111010 00110001 00110000 01111101
+```powershell
+idf.py build
+idf.py -p COM10 flash
+idf.py -p COM10 monitor
 ```
 
-RX accepts these case-sensitive text commands (no newline):
+Use the board's current COM port if it changes. `build` does not flash anything.
+Exit the serial monitor with **Ctrl+]**. The project uses an 8 MB flash layout.
 
-| Command | Effect |
+## Files
+
+| File | What it does |
 |---|---|
-| `PING` | Returns the existing `{"pong":1}` response |
-| `RESET` | Clears current session; returns state records |
-| `STATE` | Returns mode, shot count/remaining, total/last score, distance and sensitivity |
-| `MODE:FREESTYLE` / `MODE:CLASSIC` | Changes mode and resets session when mode actually changes |
-| `DIST:10.0M` / `DIST:25.0FT` | Sets distance and display units; validates physical range |
-| `CAL:1500` | Sets sensitivity threshold (0..4095) |
-| `TEST` / `TEST:7` | Generates a cycling test shot or a specified test score (0..10) |
+| `main/main.cpp` | Screens, touch buttons, and phone commands |
+| `main/remote.inc` | App commands and complete state updates |
+| `main/celebration.inc` | Debug animations and tune choices |
+| `main/hardware.cpp` | GPIO, speaker timing, display SPI, and touch I2C |
+| `main/graphics.cpp` | Drawing, text, icons, and screen updates |
+| `main/bluetooth.cpp` | Bluetooth connection and messages |
+| `main/session.cpp` | Score rules and settings |
+| `main/sensors.cpp` | Read regulator temperatures and the sensor voltage |
+| `main/music/` | Four tune files, original scores, and credits |
+| `tests/` | Session tests and optional startup UI checks |
 
-Rapid and invalid commands return `ERR:COMMAND`; invalid distance returns
-`ERR:DIST RANGE`. State responses are separate printable ASCII records such as
-`MODE:CLASSIC`, `SHOTS:3 LEFT:7`, `TOTAL:27 LAST:8`, `DIST:10.0 m`, and `CAL:1000`.
-The phone's current shot parser remains unchanged. These extra records can be
-viewed as diagnostic messages, and do not imply the phone has new settings UI.
-The original Bluetooth address allocation and GATT UUIDs are preserved.
+The phone sees the device as **PrecisionShot**. It reads updates from TX and
+sends commands to RX. See [Bluetooth commands](docs/BLE.md) for the packet
+format and UUIDs, and [music notes](main/music/README.md) for the tune sources.
 
-## Wiring — Main Board V4
-
-The firmware targets the PCB's `J_LCD` connector, verified against
-`Main Board V4.brd`. These are ESP32 GPIO numbers, not WROOM module pad
-numbers. The earlier development-board jumper wiring is not compatible.
-
-| Signal | GPIO |
-|---|---:|
-| SD CS (held inactive) | 18 |
-| Display MISO | 13 |
-| Backlight | 17 |
-| Display SCLK | 12 |
-| Display MOSI | 11 |
-| Display D/C | 15 |
-| Display reset | 16 |
-| Display CS | 14 |
-| Touch interrupt | 41 |
-| Touch SDA | 39 |
-| Touch reset | 42 |
-| Touch SCL | 40 |
-
-Display SPI is mode 0, MSB first, 20 MHz on SPI2 for PCB bring-up. The project-owned ST7796S
-initialization, RGB565 byte order, palettes, glyphs, and layout are retained.
-Touch uses I2C0 at 400 kHz, address 0x38, repeated-start register reads, and
-the existing portrait-to-landscape coordinate mapping.
-
-## Source layout
-
-- `main/main.cpp`: UI layout, touch navigation, animation and command dispatch.
-- `main/session.cpp`: testable Freestyle/Classic rules and settings values.
-- `main/graphics.cpp`: project-owned 4-bit indexed framebuffer, font, primitives
-  and ST7796S initialization (76,800 bytes for the framebuffer, no PSRAM needed).
-- `main/hardware.cpp`: ESP-IDF GPIO, SPI/DMA, I2C and timing.
-- `main/bluetooth.cpp`: ESP-IDF Bluedroid GAP/GATT server.
-- `sdkconfig.defaults`: normal target and SDK configuration.
-
-## Validation
-
-`tests/session_test.cpp` covers session rollover, zero and maximum scores,
-mode changes, unit conversions, bounds and formatting. On a machine with a host
-C++ compiler it can run through `cmake -S tests -B build/session-tests`, followed
-by a build and CTest. It also runs on the ESP32 in the optional diagnostic build.
-
-`PrecisionShot diagnostics` in `idf.py menuconfig` enables startup UI tests.
-That build exercises the actual touch-dispatch functions, checks state and
-renderer invariants, and prints named framebuffer captures over USB. It restores
-initial state after the tests. Disable diagnostics for normal operation.
-Framebuffer captures prove rendered content, not physical panel appearance or
-finger-touch accuracy. Physical acceptance still includes both fullscreen views,
-menu animation, settings controls and the DEBUG +HIT button.
-
-See `VALIDATION.md` for the checks performed on the connected device.
-# Menu and button artwork
-
-Google Material Icons (filled) are converted ahead of time from the retained SVG
-sources in `assets/google-material-icons/` to 24x24, 1-bit arrays in `main/icons.h`.
-The project-owned renderer draws foreground pixels transparently using the active
-palette. No SVG parser, icon font, Arduino code, or third-party firmware library is
-required. Apache 2.0 license, conversion notice, and source URLs accompany the assets.
-The approved set covers navigation, mode selection, settings, units, Bluetooth,
-theme, reset, and debug shot controls; existing touch areas and actions are retained.
+We use four-space indentation; `.clang-format` keeps the C++ style consistent.
+Debug Zone shows both MCP9700 regulator temperatures and the sensor ADC input.
+Bluetooth sends these readings only while the phone's Debug Zone is visible.
+J_REG33 pin 4 goes to GPIO9; J_REG5 pin 4 goes to GPIO10.
+For a sensor voltage test, use J_PSB pin 9 (GPIO1) and a shared ground.
+Keep this input between 0 and 3.3 V; never use 5 V. ADC readings saturate near
+3.1 V. An unconnected input can float, so its reading is not a connection check.
+Detection uses the raw ADC sensitivity threshold and does not add scored shots.
+Build results and hardware checks are recorded in [VALIDATION.md](VALIDATION.md).
